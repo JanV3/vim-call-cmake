@@ -192,27 +192,33 @@ function! s:CMakeMenuDirectoryChanged(event)
     endif
 
     if(g:cmake_menu_autodetect_build_folder == 1)
+
         let l:found = {'default': 0, 'debug': 0, 'release': 0}
-        if isdirectory('s:cmake_base_build_dir')
-            l:found.default = 1
+        if isdirectory(s:cmake_base_build_dir)
+            let l:found['default']=1
         endif
-        if isdirectory('s:cmake_debug_build_dir')
-            l:found.debug = 1
+        if isdirectory(s:cmake_debug_build_dir)
+            let l:found['debug']=1
         endif
-        if isdirectory('s:cmake_release_build_dir')
-            l:found.release = 1
+        if isdirectory(s:cmake_release_build_dir)
+            let l:found['release']=1
         endif
 
-        if exists(l:found[g:cmake_menu_autodetect_prefered_type])
+        if get(l:found, g:cmake_menu_autodetect_prefered_type, 0) == 1
+            echom "founded prefered"
             call s:CMakeMenuConfigure(g:cmake_menu_autodetect_prefered_type)
         else
-            if l:found.default == 1
+            if l:found['default'] == 1
                 call s:CMakeMenuConfigure('')
-            else if l:found.debug == 1
+                return
+            endif
+            if l:found['debug']==1
                 call s:CMakeMenuConfigure('debug')
-            else if l:found.release == 1
+                return
+            endif
+            if l:found['release']==1
                 call s:CMakeMenuConfigure('release')
-            else
+                return
             endif
         endif
     endif
@@ -225,7 +231,7 @@ command! CMakeMenuConfigure call s:CMakeMenuConfigure('')
 command! CMakeMenuConfigureDebug call s:CMakeMenuConfigure('debug')
 command! CMakeMenuConfigureRelease call s:CMakeMenuConfigure('release')
 
-"au DirChanged * call s:CMakeMenuDirectoryChanged(v:event)
+autocmd User RooterChDir call s:CMakeMenuDirectoryChanged(v:event)
 
 let &cpo = s:save_cpo
 unlet s:save_cpo
