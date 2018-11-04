@@ -10,12 +10,40 @@ let g:loaded_call_cmake = 1
 let s:save_cpo = &cpo
 set cpo&vim
 
+if !exists("g:cmake_menu_autodetect_build_folder")
+    let g:cmake_menu_autodetect_build_folder = 0
+endif
+
+if !exists("g:cmake_menu_autodetect_build_folder")
+    let g:cmake_menu_autodetect_build_folder = 0
+endif
+
+if !exists("g:cmake_menu_autodetect_prefered_type")
+    let g:cmake_menu_autodetect_prefered_type = ''
+endif
+
+if !exists("g:cmake_menu_autoconfigure")
+    let g:cmake_menu_autoconfigure = 0
+endif
+
+if !exists("g:cmake_menu_autoconfigure_type")
+    let g:cmake_menu_autoconfigure_type = 'debug'
+endif
+
 if !exists("s:cmake_menu_build_configured")
     let s:cmake_menu_build_configured = 0
 endif
 
 if !exists("s:cmake_base_build_dir")
     let s:cmake_base_build_dir = 'build'
+endif
+
+if !exists("s:cmake_debug_build_dir")
+    let s:cmake_debug_build_dir = s:cmake_base_build_dir . '-debug'
+endif
+
+if !exists("s:cmake_release_build_dir")
+    let s:cmake_release_build_dir = s:cmake_base_build_dir . '-release'
 endif
 
 if !exists("s:cmake_build_dir")
@@ -96,26 +124,25 @@ function! s:CMakeMenuSelectTargetMenu(...)
     endif
 endfunction
 
-
-function! s:CMakeMenuConfigureDebug()
-    call s:CMake(s:cmake_base_build_dir . '-debug', '-DCMAKE_BUILD_TYPE=Debug')
-endfunction
-
-function! s:CMakeMenuConfigureRelease()
-    call s:CMake(s:cmake_base_build_dir . '-release', '-DCMAKE_BUILD_TYPE=Release')
-endfunction
-
-function! s:CMakeMenuConfigure()
-    call s:CMake(s:cmake_base_build_dir)
+function! s:CMakeMenuConfigure(type)
+    if empty(a:type)
+        call s:CMake(s:cmake_base_build_dir)
+    endif
+    if a:type == 'debug'
+        call s:CMake(s:cmake_debug_build_dir, '-DCMAKE_BUILD_TYPE=Debug')
+    endif
+    if a:type == 'release'
+        call s:CMake(s:cmake_release_build_dir, '-DCMAKE_BUILD_TYPE=Release')
+    endif
 endfunction
 
 function! s:CMakeMenuCommands()
     let l:menu_commands = {
                 \ 0: function('s:CMakeMenuBuild'),
                 \ 1: function('s:CMakeMenuSelectTargetMenu'),
-                \ 2: function('s:CMakeMenuConfigureDebug'),
-                \ 3: function('s:CMakeMenuConfigureRelease'),
-                \ 4: function('s:CMakeMenuConfigure')}
+                \ 2: function('s:CMakeMenuConfigure', ['debug']),
+                \ 3: function('s:CMakeMenuConfigure', ['release']),
+                \ 4: function('s:CMakeMenuConfigure', [''])}
     return l:menu_commands
 endfunction
 
@@ -155,12 +182,50 @@ function! s:CMakeMenu()
                 \  'down':    '40%'})
 endfunction
 
+function! s:CMakeMenuDirectoryChanged(event)
+    if(s:cmake_menu_build_configured == 1)
+        return
+    endif
+
+    if !filereadable("CMakeLists.txt")
+        return
+    endif
+
+    if(g:cmake_menu_autodetect_build_folder == 1)
+        let l:found = {'default': 0, 'debug': 0, 'release': 0}
+        if isdirectory('s:cmake_base_build_dir')
+            l:found.default = 1
+        endif
+        if isdirectory('s:cmake_debug_build_dir')
+            l:found.debug = 1
+        endif
+        if isdirectory('s:cmake_release_build_dir')
+            l:found.release = 1
+        endif
+
+        if exists(l:found[g:cmake_menu_autodetect_prefered_type])
+            call s:CMakeMenuConfigure(g:cmake_menu_autodetect_prefered_type)
+        else
+            if l:found.default == 1
+                call s:CMakeMenuConfigure('')
+            else if l:found.debug == 1
+                call s:CMakeMenuConfigure('debug')
+            else if l:found.release == 1
+                call s:CMakeMenuConfigure('release')
+            else
+            endif
+        endif
+    endif
+endfunction
+
 command! CMakeMenu call s:CMakeMenu()
 command! CMakeMenuBuild call s:CMakeMenuBuild()
 command! CMakeMenuSelectTarget call s:CMakeMenuSelectTargetMenu(0)
-command! CMakeMenuConfigure call s:CMakeMenuConfigure()
-command! CMakeMenuConfigureDebug call s:CMakeMenuConfigureDebug()
-command! CMakeMenuConfigureRelease call s:CMakeMenuConfigureRelease()
+command! CMakeMenuConfigure call s:CMakeMenuConfigure('')
+command! CMakeMenuConfigureDebug call s:CMakeMenuConfigure('debug')
+command! CMakeMenuConfigureRelease call s:CMakeMenuConfigure('release')
+
+"au DirChanged * call s:CMakeMenuDirectoryChanged(v:event)
 
 let &cpo = s:save_cpo
 unlet s:save_cpo
