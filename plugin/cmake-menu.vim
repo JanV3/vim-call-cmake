@@ -67,9 +67,8 @@ function! s:CMakeSetMakeprg()
     let s:cmake_menu_build_configured = 1
 endfunction
 
-function! s:CMake(build_dir, ...)
+function! s:CMake(...)
     if filereadable("CMakeLists.txt")
-        let s:cmake_build_dir = fnameescape(a:build_dir)
         execute '!(mkdir -p ' . s:cmake_build_dir . ' && cd ' . s:cmake_build_dir . ' && cmake ' . join(a:000) . ' ' .  getcwd() . ')'
         if v:shell_error == 0
             call s:CMakeSetMakeprg()
@@ -124,15 +123,23 @@ function! s:CMakeMenuSelectTargetMenu(...)
     endif
 endfunction
 
+function! s:CMakeMenuSetBuildDir(build_dir)
+    let s:cmake_build_dir = fnameescape(a:build_dir)
+    call s:CMakeSetMakeprg()
+endfunction
+
 function! s:CMakeMenuConfigure(type)
     if empty(a:type)
-        call s:CMake(s:cmake_base_build_dir)
+        call s:CMakeMenuSetBuildDir(s:cmake_base_build_dir)
+        call s:CMake()
     endif
     if a:type == 'debug'
-        call s:CMake(s:cmake_debug_build_dir, '-DCMAKE_BUILD_TYPE=Debug')
+        call s:CMakeMenuSetBuildDir(s:cmake_debug_build_dir)
+        call s:CMake('-DCMAKE_BUILD_TYPE=Debug')
     endif
     if a:type == 'release'
-        call s:CMake(s:cmake_release_build_dir, '-DCMAKE_BUILD_TYPE=Release')
+        call s:CMakeMenuSetBuildDir(s:cmake_release_build_dir)
+        call s:CMake('-DCMAKE_BUILD_TYPE=Release')
     endif
 endfunction
 
@@ -183,16 +190,13 @@ function! s:CMakeMenu()
 endfunction
 
 function! s:CMakeMenuDirectoryChanged(event)
-    if(s:cmake_menu_build_configured == 1)
-        return
-    endif
-
     if !filereadable("CMakeLists.txt")
         return
     endif
 
     if(g:cmake_menu_autodetect_build_folder == 1)
-
+        let s:cmake_active_target = ''
+        let s:cmake_menu_build_configured=0
         let l:found = {'default': 0, 'debug': 0, 'release': 0}
         if isdirectory(s:cmake_base_build_dir)
             let l:found['default']=1
@@ -205,22 +209,37 @@ function! s:CMakeMenuDirectoryChanged(event)
         endif
 
         if get(l:found, g:cmake_menu_autodetect_prefered_type, 0) == 1
-            echom "founded prefered"
-            call s:CMakeMenuConfigure(g:cmake_menu_autodetect_prefered_type)
+            call s:CMakeMenuSetBuildDir(s:cmake_base_build_dir . '-' . g:cmake_menu_autodetect_prefered_type)
         else
             if l:found['default'] == 1
-                call s:CMakeMenuConfigure('')
+                call s:CMakeMenuSetBuildDir(s:cmake_base_build_dir)
                 return
             endif
             if l:found['debug']==1
-                call s:CMakeMenuConfigure('debug')
+                call s:CMakeMenuSetBuildDir(s:cmake_debug_build_dir)
                 return
             endif
             if l:found['release']==1
-                call s:CMakeMenuConfigure('release')
+                call s:CMakeMenuSetBuildDir(s:cmake_release_build_dir)
                 return
             endif
         endif
+    endif
+endfunction
+
+function! g:CMakeMenuStatus()
+    if filereadable("CMakeLists.txt")
+        if s:cmake_menu_build_configured == 1
+            if s:cmake_active_target == ''
+                return "CMake: ALL"
+            else
+                return "CMake: " . s:cmake_active_target
+            endif
+        else
+            return "CMake: unconfigured"
+        endif
+    else
+        return ''
     endif
 endfunction
 
