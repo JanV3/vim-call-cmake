@@ -11,15 +11,11 @@ let s:save_cpo = &cpo
 set cpo&vim
 
 if !exists("g:cmake_menu_autodetect_build_folder")
-    let g:cmake_menu_autodetect_build_folder = 0
-endif
-
-if !exists("g:cmake_menu_autodetect_build_folder")
-    let g:cmake_menu_autodetect_build_folder = 0
+    let g:cmake_menu_autodetect_build_folder = 1
 endif
 
 if !exists("g:cmake_menu_autodetect_prefered_type")
-    let g:cmake_menu_autodetect_prefered_type = ''
+    let g:cmake_menu_autodetect_prefered_type = 'debug'
 endif
 
 if !exists("g:cmake_menu_autoconfigure")
@@ -67,11 +63,23 @@ function! s:CMakeSetMakeprg()
     let s:cmake_menu_build_configured = 1
 endfunction
 
+function! g:CMakeDone()
+    if g:asyncrun_code == 0
+        call s:CMakeSetMakeprg()
+    endif
+endfunction
+
 function! s:CMake(...)
     if filereadable("CMakeLists.txt")
-        execute '!(mkdir -p ' . s:cmake_build_dir . ' && cd ' . s:cmake_build_dir . ' && cmake ' . join(a:000) . ' ' .  getcwd() . ')'
-        if v:shell_error == 0
-            call s:CMakeSetMakeprg()
+        let l:command = 'mkdir -p ' . s:cmake_build_dir . ' && cd ' . s:cmake_build_dir . ' && cmake ' . join(a:000) . ' ' .  getcwd()
+
+        if exists(":AsyncRun")
+            exec "AsyncRun -post=call\\ g:CMakeDone() " . l:command
+        else
+            execute '!(' . l:command . ')'
+            if v:shell_error == 0
+                call s:CMakeSetMakeprg()
+            endif
         endif
     else
         echoerr 'CMakeLists.txt not found'
@@ -189,42 +197,41 @@ function! s:CMakeMenu()
                 \  'down':    '40%'})
 endfunction
 
-function! s:CMakeMenuDirectoryChanged(event)
+function s:CMakeMenuAutodetectBuildFolder()
     if !filereadable("CMakeLists.txt")
         return
     endif
 
-    if(g:cmake_menu_autodetect_build_folder == 1)
-        let s:cmake_active_target = ''
-        let s:cmake_menu_build_configured=0
-        let l:found = {'default': 0, 'debug': 0, 'release': 0}
-        if isdirectory(s:cmake_base_build_dir)
-            let l:found['default']=1
-        endif
-        if isdirectory(s:cmake_debug_build_dir)
-            let l:found['debug']=1
-        endif
-        if isdirectory(s:cmake_release_build_dir)
-            let l:found['release']=1
-        endif
-
-        if get(l:found, g:cmake_menu_autodetect_prefered_type, 0) == 1
-            call s:CMakeMenuSetBuildDir(s:cmake_base_build_dir . '-' . g:cmake_menu_autodetect_prefered_type)
-        else
-            if l:found['default'] == 1
-                call s:CMakeMenuSetBuildDir(s:cmake_base_build_dir)
-                return
-            endif
-            if l:found['debug']==1
-                call s:CMakeMenuSetBuildDir(s:cmake_debug_build_dir)
-                return
-            endif
-            if l:found['release']==1
-                call s:CMakeMenuSetBuildDir(s:cmake_release_build_dir)
-                return
-            endif
-        endif
+    let s:cmake_active_target = ''
+    let s:cmake_menu_build_configured=0
+    let l:found = {'default': 0, 'debug': 0, 'release': 0}
+    if isdirectory(s:cmake_base_build_dir)
+        let l:found['default']=1
     endif
+    if isdirectory(s:cmake_debug_build_dir)
+        let l:found['debug']=1
+    endif
+    if isdirectory(s:cmake_release_build_dir)
+        let l:found['release']=1
+    endif
+
+    if get(l:found, g:cmake_menu_autodetect_prefered_type, 0) == 1
+        call s:CMakeMenuSetBuildDir(s:cmake_base_build_dir . '-' . g:cmake_menu_autodetect_prefered_type)
+    elseif l:found['default'] == 1
+        call s:CMakeMenuSetBuildDir(s:cmake_base_build_dir)
+    elseif l:found['debug'] == 1
+        call s:CMakeMenuSetBuildDir(s:cmake_debug_build_dir)
+    elseif l:found['release'] == 1
+        call s:CMakeMenuSetBuildDir(s:cmake_release_build_dir)
+        return
+    elseif g:cmake_menu_autoconfigure == 1
+        call s:CMakeMenuSetBuildDir(s:cmake_base_build_dir . '-' . g:cmake_menu_autoconfigure_type)
+        call s:CMake()
+    endif
+endfunction
+
+function! s:CMakeMenuDirectoryChanged(event)
+    call s:CMakeMenuAutodetectBuildFolder()
 endfunction
 
 function! g:CMakeMenuStatus()
@@ -250,7 +257,10 @@ command! CMakeMenuConfigure call s:CMakeMenuConfigure('')
 command! CMakeMenuConfigureDebug call s:CMakeMenuConfigure('debug')
 command! CMakeMenuConfigureRelease call s:CMakeMenuConfigure('release')
 
-autocmd User RooterChDir call s:CMakeMenuDirectoryChanged(v:event)
+if(g:cmake_menu_autodetect_build_folder == 1)
+    autocmd User RooterChDir call s:CMakeMenuDirectoryChanged(v:event)
+    call s:CMakeMenuAutodetectBuildFolder()
+endif
 
 let &cpo = s:save_cpo
 unlet s:save_cpo
